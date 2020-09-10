@@ -1,7 +1,9 @@
 # fable
-A simple linear, non-recursive data-interchange format designed to be easily emitted, and parsed by any language.
+A simple, linear, non-recursive data-interchange format designed to be easily emitted, and parsed by any language.
 
 ## Specification
+
+The primary purpose of the `fable` format is to provide an easy way to store and transport multiple variables, and tables (in CSV format) with optional header name declarations. The goal was to create a format that could be emitted from any language as simply as possible (originally designed to be emitted from a Fortran95 codebase).
 
 The current specification version is `v0.1.0`. (The `%%` directive is provided for forward compatibility with future versions of the specification/parser.)
 
