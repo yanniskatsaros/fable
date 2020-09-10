@@ -190,15 +190,15 @@ def load(io: IO) -> dict:
     """
     results = {}
 
-    for s in iter(io):
+    # document frontmatter
+    s = next(io)
+    if s.startswith('%%'):
+        # TODO: used for forward compatibility with future parsers
+        version = extract_version(s)
+
+    for s in io:
         if s.startswith('#'):
             # ignore any comments
-            continue
-
-        if s.startswith('%%'):
-            # document frontmatter
-            # TODO: used for forward compatibility with future parsers
-            version = extract_version(s)
             continue
 
         if not s.startswith('@'):
