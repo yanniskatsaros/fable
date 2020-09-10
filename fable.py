@@ -214,7 +214,6 @@ def load(io: IO) -> dict:
             if meta.header:
                 s = next(io)
                 header = [try_cast(v) for v in s.strip().split(',')]
-                rows.append(row)
 
             for _ in range(meta.rows):
                 s = next(io)
