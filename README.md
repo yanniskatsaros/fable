@@ -19,7 +19,7 @@ The current specification version is `v0.1.0`. (The `%%` directive is provided f
 # variable declaration and supported types
 @var(my_integer) = 10          # integer
 @var(my_string) = hello world  # string   
-@var(my_float) = 3.14          # float
+@var(my_float) = 3.14          # real
 @var(my_bool) = true           # boolean
 
 # the following are all valid strings
@@ -31,7 +31,7 @@ The current specification version is `v0.1.0`. (The `%%` directive is provided f
 
 # a table with 5 rows of values, and no headers
 # table values are parsed like a CSV file
-@table(my_table, 5)
+@table(my_table_no_header, 5)
 0,1,3.13141,14.109123
 1,1,3.13141,14.109123
 2,1,3.13141,14.109123
@@ -40,7 +40,7 @@ The current specification version is `v0.1.0`. (The `%%` directive is provided f
 
 # table declaration with 5 rows of values, with headers (using the +)
 # table values are parsed like a CSV file
-@table(my_table, 5+)
+@table(my_table_with_header, 5+)
 time,pipe_section,velocity,temperature
 0,1,3.13141,14.109123
 1,1,3.13141,14.109123
@@ -74,11 +74,20 @@ print(document)
  'my_float': 3.14,
  'my_integer': 10,
  'my_string': 'hello',
- 'my_table': {'header': ['time', 'pipe_section', 'velocity', 'temperature'],
-              'values': [[4, 1, 3.13141, 14.109123],
-                         [0, 1, 3.13141, 14.109123],
-                         [1, 1, 3.13141, 14.109123],
-                         [2, 1, 3.13141, 14.109123],
-                         [3, 1, 3.13141, 14.109123],
-                         [4, 1, 3.13141, 14.109123]]}}
+ 'my_table_no_header': {'header': None,
+                        'values': [[0, 1, 3.13141, 14.109123],
+                                   [1, 1, 3.13141, 14.109123],
+                                   [2, 1, 3.13141, 14.109123],
+                                   [3, 1, 3.13141, 14.109123],
+                                   [4, 1, 3.13141, 14.109123]]},
+ 'my_table_with_header': {'header': ['time',
+                                     'pipe_section',
+                                     'velocity',
+                                     'temperature'],
+                          'values': [[4, 1, 3.13141, 14.109123],
+                                     [0, 1, 3.13141, 14.109123],
+                                     [1, 1, 3.13141, 14.109123],
+                                     [2, 1, 3.13141, 14.109123],
+                                     [3, 1, 3.13141, 14.109123],
+                                     [4, 1, 3.13141, 14.109123]]}}
 ```
