@@ -48,3 +48,37 @@ time,pipe_section,velocity,temperature
 3,1,3.13141,14.109123
 4,1,3.13141,14.109123
 ```
+
+## Parsers
+
+The `fable` format is designed to be language agnostic and easily parsed by any language.
+
+### Python
+
+The following parser is built in Python and provides a familiar interface and almost identical usage to the builtin `json` library.
+
+```python
+import fable
+
+# load and parse the example file shown in the specification
+with open('example.fable', 'r') as f:
+    document = fable.load(f)
+    
+print(document)
+```
+```
+{'a_string': 'hello',
+ 'b_string': 'hello',
+ 'c_string': 'hello',
+ 'my_bool': True,
+ 'my_float': 3.14,
+ 'my_integer': 10,
+ 'my_string': 'hello',
+ 'my_table': {'header': ['time', 'pipe_section', 'velocity', 'temperature'],
+              'values': [[4, 1, 3.13141, 14.109123],
+                         [0, 1, 3.13141, 14.109123],
+                         [1, 1, 3.13141, 14.109123],
+                         [2, 1, 3.13141, 14.109123],
+                         [3, 1, 3.13141, 14.109123],
+                         [4, 1, 3.13141, 14.109123]]}}
+```
