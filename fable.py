@@ -20,6 +20,19 @@ class Version:
 
     def __str__(self):
         return f'v{self.major}.{self.minor}.{self.patch}'
+
+    @classmethod
+    def parse_specification(cls, s: str) -> Optional['Version']:
+        pattern = r'%%\s+(\d.\d.\d)'
+        regex = re.compile(pattern)
+        match = regex.match(s)
+
+        if match is None:
+            return None
+        
+        major, minor, patch = match.group(1).split('.')
+
+        return cls(int(major), int(minor), int(patch))
     
 @dataclass
 class Variable:
