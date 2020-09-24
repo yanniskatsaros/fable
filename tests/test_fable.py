@@ -65,6 +65,21 @@ class TestFloatParser:
         result = Parser.parse_float(s)
         assert result == Float('num', 4.0, False)
 
+    def test_nullable_float(self):
+        s = 'float? num null'
+        result = Parser.parse_float(s)
+        assert result == Float('num', None, True)
+
+    def test_catch_null_type_error(self):
+        s = 'float num null'
+        result = Parser.parse_float(s)
+        assert result.code == ErrorCode.NULLABLE_TYPE_ERROR
+
+    def test_catch_parsing_error(self):
+        s = 'float num # woops forgot the value'
+        result = Parser.parse_float(s)
+        assert result.code == ErrorCode.PARSING_ERROR
+
     def test_all_nans(self):
         nans = [
             'float num nan',
