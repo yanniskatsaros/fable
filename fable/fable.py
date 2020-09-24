@@ -15,10 +15,11 @@ COMMENT = 35
 
 # compile each regex pattern once, reuse many times
 SPECIFICATION_PATTERN = re.compile(r'%%\s+(\d.\d.\d)')
-INTEGER_PATTERN = re.compile(r'\s*(integer|integer\?)\s+([a-zA-Z_\d]+)\s+(\d+|null)')
-GENERIC_FLOAT_PATTERN = re.compile(r'\s*(float|float\?)\s+([a-zA-Z_\d]+)\s+(\S*)')
+INTEGER_PATTERN = re.compile(r'\s*(integer[\?]?)\s+([a-zA-Z_\d]+)\s+(\d+|null)')
+GENERIC_FLOAT_PATTERN = re.compile(r'\s*(float[\?]?)\s+([a-zA-Z_\d]+)\s+(\S*)')
 FLOAT_PATTERN = re.compile(r'[\+|\-]?[\d{3}_?]+\.?[\d{3}_?]*[e|E]?[\+\-]?[\d]*|null')
-STRING_PATTERN = re.compile(r'\s*(string|string\?)\s+([a-zA-Z_\d]+)\s+(\".*\"|null)')
+STRING_PATTERN = re.compile(r'\s*(string[\?]?)\s+([a-zA-Z_\d]+)\s+(\".*\"|null)')
+BOOLEAN_PATTERN = re.compile(r'\s*(boolean[\?]?)\s+([a-zA-Z_\d]+)\s+(true|false|null)')
 
 @dataclass
 class Version:
