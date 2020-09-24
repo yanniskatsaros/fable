@@ -1,0 +1,96 @@
+%% 0.2.0
+# ^specification version - can be used by parser for
+# backward/forward compatability
+
+# comments work, empty lines are ignored, extra space between
+# variables and delimiters is also ignored
+
+# key-value declaration and supported types
+integer my_int 10
+float my_float 3.14
+boolean my_bool true
+boolean my_other_bool false
+string my_string "hello world"
+
+# there are also "nullable" types as modifiers of the
+# "primitive" types that can accept `null`
+integer? age null
+boolean? is_present null
+string? name null
+
+# these cause a parsing error, for example
+integer years null   # requires integer? declaration
+float salary null    # requires float? declaration
+
+# float types support scientific notation, infinity, and "not a number" values
+float a_num 1.4151426
+float b_num +1.4151426
+float c_num -1.4151426
+
+# scientific notation
+float d_num 5.61e+13
+float e_num 1e06
+float f_num -8.71E-4
+
+# separators work too
+float g_num 218_411.897_871
+
+# infinity
+float h_num inf
+float i_num +inf
+float j_num -inf
+
+# not a number
+float k_num nan
+float l_num +nan
+float m_num -nan
+
+# note, this is different than nullability!
+# nan and null are two different concepts
+float ok_float_1 nan
+float ok_float_2 14.51
+float bad_float null   # error, need float?
+float? ok_float_3 null   # this is the correct way
+float? ok_float_4 nan    # also ok
+
+# table declarations are similar but entries
+# span over multiple rows and types are *required*
+# each header name is delimited by a comma and requires quotes
+# each column type follows the same rules as variables above
+
+# table without a header
+table example_table_no_header
+integer,integer,integer,float,float,integer
+0,1,83,0.01,7136,36
+0,2,96,0.01,7579,39
+0,3,95,0.02,7469,34
+0,4,98,0.02,6227,38
+0,5,96,0.04,7769,40
+1,1,99,0.05,6219,36
+1,2,89,0.01,6891,38
+1,3,96,0.05,6926,39
+1,4,80,0.05,7082,35
+1,5,98,0.03,6200,39
+
+# table with a header row
+table+ example_table_with_header
+integer,integer,integer,float,float,integer
+"time","pipe_section","velocity","mass","pressure","temperature"
+0,1,83,0.01,7136,36
+0,2,96,0.01,7579,39
+0,3,95,0.02,7469,34
+0,4,98,0.02,6227,38
+0,5,96,0.04,7769,40
+1,1,99,0.05,6219,36
+1,2,89,0.01,6891,38
+1,3,96,0.05,6926,39
+1,4,80,0.05,7082,35
+1,5,98,0.03,6200,39
+
+# table with some nullable columns and header
+table+ students
+integer,string,integer,float?
+"id","name","grade","test_score"
+0,"Jane Doe",2,98.1
+1,"John Doe",3,null
+2,"Other Doe",1,nan
