@@ -4,6 +4,9 @@ version = "0.2.0"
 description = "A simple, linear, non-recursive data interchange specification"
 authors = ["Yannis Katsaros <yannis@katsaros.io>"]
 license = "GPL-3.0"
+packages = [
+    {include = "fable"}
+]
 
 [tool.poetry.dependencies]
 python = "^3.7"
