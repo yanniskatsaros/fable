@@ -6,6 +6,7 @@ from fable.fable import (
     Integer,
     Float,
     String,
+    Boolean,
     Error,
     ErrorCode,
 )
@@ -232,4 +233,30 @@ class TestStringParser:
     def test_catch_parsing_error(self):
         s = 'string message # woops forgot the value'
         result = Parser.parse_string(s)
+        assert result.code == ErrorCode.PARSING_ERROR
+
+class TestBooleanParser:
+    def test_generic_boolean(self):
+        s = 'boolean is_happy true'
+        result = Parser.parse_boolean(s)
+        assert result == Boolean('is_happy', True, False)
+
+    def test_generic_boolean_with_comment(self):
+        s = 'boolean is_happy true   # comment'
+        result = Parser.parse_boolean(s)
+        assert result == Boolean('is_happy', True, False)
+
+    def test_nullable_generic_boolean(self):
+        s = 'boolean? is_happy null'
+        result = Parser.parse_boolean(s)
+        assert result == Boolean('is_happy', None, True)
+
+    def test_catch_null_type_error(self):
+        s = 'boolean is_happy null'
+        result = Parser.parse_boolean(s)
+        assert result.code == ErrorCode.NULLABLE_TYPE_ERROR
+
+    def test_catch_parsing_error(self):
+        s = 'boolean is_happy # woops forgot the rest'
+        result = Parser.parse_boolean(s)
         assert result.code == ErrorCode.PARSING_ERROR
