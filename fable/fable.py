@@ -60,6 +60,12 @@ class String:
     nullable: bool
 
 @dataclass
+class Boolean:
+    name: str
+    value: Optional[bool]
+    nullable: bool
+
+@dataclass
 class Error:
     message: str
     code: int
@@ -193,6 +199,35 @@ class Parser:
         value = value.replace('"', '')
 
         return String(name, value, nullable)
+
+    @staticmethod
+    def parse_boolean(s: str) -> Union[Boolean, Error]:
+        match = BOOLEAN_PATTERN.match(s)
+        if match is None:
+            return Error('parsing error', ErrorCode.PARSING_ERROR)
+
+        # check if the variable was declared nullable
+        nullable = False
+        type_ = match.group(1)
+        if type_.endswith('?'):
+            nullable = True
+
+        name = match.group(2)
+        value = match.group(3)
+
+        if (nullable) and (value == 'null'):
+            return Boolean(name, None, True)
+
+        if (not nullable) and (value == 'null'):
+            msg = 'null value not allowed for non-nullable type: boolean; use boolean?'
+            return Error(msg, ErrorCode.NULLABLE_TYPE_ERROR)
+
+        # cast to correct Python type
+        if value == 'true':
+            value = True
+        else:
+            value = False
+        return Boolean(name, value, nullable)
 
 def try_cast(v: str) -> Value:
     """
