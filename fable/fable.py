@@ -18,7 +18,7 @@ SPECIFICATION_PATTERN = re.compile(r'%%\s+(\d.\d.\d)')
 INTEGER_PATTERN = re.compile(r'\s*(integer|integer\?)\s+([a-zA-Z_\d]+)\s+(\d+|null)')
 GENERIC_FLOAT_PATTERN = re.compile(r'\s*(float|float\?)\s+([a-zA-Z_\d]+)\s+(\S*)')
 FLOAT_PATTERN = re.compile(r'[\+|\-]?[\d{3}_?]+\.?[\d{3}_?]*[e|E]?[\+\-]?[\d]*|null')
-STRING_PATTERN = re.compile(r'')
+STRING_PATTERN = re.compile(r'\s*(string|string\?)\s+([a-zA-Z_\d]+)\s+(\".*\"|null)')
 
 @dataclass
 class Version:
@@ -165,6 +165,33 @@ class Parser:
             return Error(msg, ErrorCode.NULLABLE_TYPE_ERROR)
 
         return Float(name, float(value), nullable)
+
+    @staticmethod
+    def parse_string(s: str) -> Union[String, Error]:
+        match = STRING_PATTERN.match(s)
+        if match is None:
+            return Error('parsing error', ErrorCode.PARSING_ERROR)
+
+        # check if the variable was declared nullable
+        nullable = False
+        type_ = match.group(1)
+        if type_.endswith('?'):
+            nullable = True
+
+        name = match.group(2)
+        value = match.group(3)
+
+        if (nullable) and (value == 'null'):
+            return String(name, None, True)
+
+        if (not nullable) and (value == 'null'):
+            msg = 'null value not allowed for non-nullable type: string; use string?'
+            return Error(msg, ErrorCode.NULLABLE_TYPE_ERROR)
+
+        # remove the "" from the string literal
+        value = value.replace('"', '')
+
+        return String(name, value, nullable)
 
 def try_cast(v: str) -> Value:
     """
