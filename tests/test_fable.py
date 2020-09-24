@@ -5,6 +5,7 @@ from fable.fable import (
     Parser,
     Integer,
     Float,
+    String,
     Error,
     ErrorCode,
 )
@@ -191,3 +192,29 @@ class TestFloatParser:
         s = 'float num 28_19_79.44_15_12'
         result = Parser.parse_float(s)
         assert result == Float('num', 281979.441512, False)
+
+class TestStringParser:
+    def test_generic_string(self):
+        s = 'string message "hello world"'
+        result = Parser.parse_string(s)
+        assert result == String('message', 'hello world', False)
+
+    def test_generic_string_with_comment(self):
+        s = 'string message "  . (451)-hello eVery_one "  # weird string'
+        result = Parser.parse_string(s)
+        assert result == String('message', '  . (451)-hello eVery_one ', False)
+
+    def test_nullable_generic_string(self):
+        s = 'string? message null'
+        result = Parser.parse_string(s)
+        assert result == String('message', None, True)
+
+    def test_catch_null_type_error(self):
+        s = 'string message null'
+        result = Parser.parse_string(s)
+        assert result.code == ErrorCode.NULLABLE_TYPE_ERROR
+
+    def test_catch_parsing_error(self):
+        s = 'string message # woops forgot the value'
+        result = Parser.parse_string(s)
+        assert result.code == ErrorCode.PARSING_ERROR
