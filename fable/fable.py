@@ -12,6 +12,9 @@ PERIOD = 46
 EOL = 10
 COMMENT = 35
 
+# compile each regex pattern once, reuse many times
+SPECIFICATION_PATTERN = re.compile(r'%%\s+(\d.\d.\d)')
+
 @dataclass
 class Version:
     major: int
@@ -23,9 +26,7 @@ class Version:
 
     @classmethod
     def parse_specification(cls, s: str) -> Optional['Version']:
-        pattern = r'%%\s+(\d.\d.\d)'
-        regex = re.compile(pattern)
-        match = regex.match(s)
+        match = SPECIFICATION_PATTERN.match(s)
 
         if match is None:
             return None
@@ -33,7 +34,7 @@ class Version:
         major, minor, patch = match.group(1).split('.')
 
         return cls(int(major), int(minor), int(patch))
-    
+
 @dataclass
 class Variable:
     name: str
