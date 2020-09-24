@@ -16,7 +16,8 @@ COMMENT = 35
 # compile each regex pattern once, reuse many times
 SPECIFICATION_PATTERN = re.compile(r'%%\s+(\d.\d.\d)')
 INTEGER_PATTERN = re.compile(r'\s*(integer|integer\?)\s+([a-zA-Z_\d]+)\s+(\d+|null)')
-FLOAT_PATTERN = re.compile(r'')
+GENERIC_FLOAT_PATTERN = re.compile(r'\s*(float|float\?)\s+([a-zA-Z_\d]+)\s+(\S*)')
+FLOAT_PATTERN = re.compile(r'[\+|\-]?[\d{3}_?]+\.?[\d{3}_?]*[e|E]?[\+\-]?[\d]*|null')
 STRING_PATTERN = re.compile(r'')
 
 @dataclass
@@ -111,10 +112,59 @@ class Parser:
             return Integer(name, None, True)
 
         if (not nullable) and (value == 'null'):
-            msg = 'null value not allowed for non-nullable type: integer'
+            msg = 'null value not allowed for non-nullable type: integer; use integer?'
             return Error(msg, ErrorCode.NULLABLE_TYPE_ERROR)
 
         return Integer(name, int(value), nullable)
+
+    @staticmethod
+    def parse_float(s: str) -> Union[Float, Error]:
+        def isnan(s: str) -> bool:
+            return 'nan' in s.lower()
+        
+        def isinf(s: str) -> bool:
+            return 'inf' in s.lower()
+
+        match = GENERIC_FLOAT_PATTERN.match(s)
+        if match is None:
+            return Error('parsing error', ErrorCode.PARSING_ERROR)
+
+        # check if the variable was declared nullable
+        nullable = False
+        type_ = match.group(1)
+        if type_.endswith('?'):
+            nullable = True
+
+        # extract the actual definition
+        name = match.group(2)
+        maybe_values = match.group(3)
+        num_match = FLOAT_PATTERN.match(maybe_values)
+
+        # check for nans/infs, and handle appropriately
+        if num_match is None:
+            if isinf(maybe_values):
+                return Float(name, float('inf'), nullable)
+            if isnan(maybe_values):
+                return Float(name, float('nan'), nullable)
+            
+            msg = f'parsing error - unknown token: {maybe_values}'
+            return Error(msg, ErrorCode.PARSING_ERROR)
+
+        # check again for any nans/infs that may have matched due to numbers being present
+        if isnan(maybe_values):
+            return Float(name, float('nan'), nullable)
+        if isinf(maybe_values):
+            return Float(name, float('inf'), nullable)
+        
+        value = num_match.group(0)
+        if (nullable) and (value == 'null'):
+            return Float(name, None, True)
+
+        if (not nullable) and (value == 'null'):
+            msg = 'null value not allowed for non-nullable type: float; use float?'
+            return Error(msg, ErrorCode.NULLABLE_TYPE_ERROR)
+
+        return Float(name, float(value), nullable)
 
 def try_cast(v: str) -> Value:
     """
