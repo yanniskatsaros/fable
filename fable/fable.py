@@ -2,6 +2,7 @@ import sys
 import re
 from pathlib import Path
 from dataclasses import dataclass
+from enum import Enum, auto
 from typing import Optional, Union, List, IO
 
 Value = Union[int, float, str, bool]
@@ -14,6 +15,9 @@ COMMENT = 35
 
 # compile each regex pattern once, reuse many times
 SPECIFICATION_PATTERN = re.compile(r'%%\s+(\d.\d.\d)')
+INTEGER_PATTERN = re.compile(r'\s*(integer|integer\?)\s+([a-zA-Z_\d]+)\s+(\d+|null)')
+FLOAT_PATTERN = re.compile(r'')
+STRING_PATTERN = re.compile(r'')
 
 @dataclass
 class Version:
@@ -34,6 +38,33 @@ class Version:
         major, minor, patch = match.group(1).split('.')
 
         return cls(int(major), int(minor), int(patch))
+
+@dataclass
+class Integer:
+    name: str
+    value: Optional[int]
+    nullable: bool
+
+@dataclass
+class Float:
+    name: str
+    value: Optional[float]
+    nullable: bool
+
+@dataclass
+class String:
+    name: str
+    value: Optional[str]
+    nullable: bool
+
+@dataclass
+class Error:
+    message: str
+    code: int
+
+class ErrorCode(Enum):
+    PARSING_ERROR = auto()
+    NULLABLE_TYPE_ERROR = auto()
 
 @dataclass
 class Variable:
@@ -59,6 +90,31 @@ class Document:
         
         if not hasattr(self, 'version'):
             setattr(self, 'version', None)
+
+class Parser:
+    @staticmethod
+    def parse_integer(s: str) -> Union[Integer, Error]:
+        match = INTEGER_PATTERN.match(s)
+        if match is None:
+            return Error('parsing error', ErrorCode.PARSING_ERROR)
+
+        # check if the variable was declared nullable
+        nullable = False
+        type_ = match.group(1)
+        if type_.endswith('?'):
+            nullable = True
+
+        name = match.group(2)
+        value = match.group(3)
+
+        if (nullable) and (value == 'null'):
+            return Integer(name, None, True)
+
+        if (not nullable) and (value == 'null'):
+            msg = 'null value not allowed for non-nullable type: integer'
+            return Error(msg, ErrorCode.NULLABLE_TYPE_ERROR)
+
+        return Integer(name, int(value), nullable)
 
 def try_cast(v: str) -> Value:
     """
