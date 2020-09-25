@@ -3,23 +3,35 @@ import re
 from pathlib import Path
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Optional, Union, List, IO
-
-Value = Union[int, float, str, bool]
-
-SPACE = 32
-UNDERSCORE = 95
-PERIOD = 46
-EOL = 10
-COMMENT = 35
+from typing import Optional, Union, List, IO, Callable
 
 # compile each regex pattern once, reuse many times
 SPECIFICATION_PATTERN = re.compile(r'%%\s+(\d.\d.\d)')
-INTEGER_PATTERN = re.compile(r'\s*(integer[\?]?)\s+([a-zA-Z_\d]+)\s+(\d+|null)')
-GENERIC_FLOAT_PATTERN = re.compile(r'\s*(float[\?]?)\s+([a-zA-Z_\d]+)\s+(\S*)')
-FLOAT_PATTERN = re.compile(r'[\+|\-]?[\d{3}_?]+\.?[\d{3}_?]*[e|E]?[\+\-]?[\d]*|null')
-STRING_PATTERN = re.compile(r'\s*(string[\?]?)\s+([a-zA-Z_\d]+)\s+(\".*\"|null)')
-BOOLEAN_PATTERN = re.compile(r'\s*(boolean[\?]?)\s+([a-zA-Z_\d]+)\s+(true|false|null)')
+
+# parse variable declarations of the form: <type> <name> <value>
+VARIABLE_DECLARATION_PATTERN = re.compile(r'^\s*(integer[\?]?|float[\?]?|string[\?]?|boolean[\?]?)\s+([a-zA-Z_\d]+)\s+(.+)$')
+
+# parse table declarations of the form: table <name> or table+ <name>
+TABLE_DECLARATION_PATTERN = re.compile(r'\s*(table[\+]?)\s+([a-zA-Z_\d]+)')
+
+# parse values of defined `integer` types
+INTEGER_PATTERN = re.compile(r'\s*(\d+)')
+NULLABLE_INTEGER_PATTERN = re.compile(r'\s*(\d+|null)')
+
+# parse values of defined `float` types
+FLOAT_PATTERN = re.compile(r'\s*([\+|\-]?[\d{3}_?]+\.?[\d{3}_?]*[e|E]?[\+\-]?[\d]*)')
+NULLABLE_FLOAT_PATTERN = re.compile(r'\s*([\+|\-]?[\d{3}_?]+\.?[\d{3}_?]*[e|E]?[\+\-]?[\d]*|null)')
+
+# parse values of defined `string` types
+STRING_PATTERN = re.compile(r'\s*(\".*\")')
+NULLABLE_STRING_PATTERN = re.compile(r'\s*(\".*\"|null)')
+
+# parse values of defined `boolean` types
+BOOLEAN_PATTERN = re.compile(r'\s*(true|false)')
+NULLABLE_BOOLEAN_PATTERN = re.compile(r'\s*(true|false|null)')
+
+class ParsingError(Exception):
+    pass
 
 @dataclass
 class Version:
@@ -42,28 +54,15 @@ class Version:
         return cls(int(major), int(minor), int(patch))
 
 @dataclass
-class Integer:
+class Variable:
     name: str
-    value: Optional[int]
-    nullable: bool
+    value: Union[int, float, str, bool, None]
 
 @dataclass
-class Float:
+class Table:
     name: str
-    value: Optional[float]
-    nullable: bool
-
-@dataclass
-class String:
-    name: str
-    value: Optional[str]
-    nullable: bool
-
-@dataclass
-class Boolean:
-    name: str
-    value: Optional[bool]
-    nullable: bool
+    header: Optional[List[str]]
+    values: List[List[Variable]]
 
 @dataclass
 class Error:
@@ -73,291 +72,190 @@ class Error:
 class ErrorCode(Enum):
     PARSING_ERROR = auto()
     NULLABLE_TYPE_ERROR = auto()
+    UNKNOWN_TYPE = auto()
+    TYPE_ERROR = auto()
 
-@dataclass
-class Variable:
-    name: str
-    value: Value
+def parse_integer(s: str) -> Union[int, Error]:
+    match = INTEGER_PATTERN.match(s)
+    if match is None:
+        return Error(f'invalid literal for integer type: {s}', ErrorCode.TYPE_ERROR)
+    return int(match.group(1))
 
-@dataclass
-class TableMeta:
-    name: str
-    header: bool
-    rows: int
-
-@dataclass
-class Table:
-    name: str
-    header: Optional[List[str]]
-    values: List[List[Value]]
-
-class Document:
-    def __init__(self, d: dict):
-        for k, v in d.items():
-            setattr(self, k, v)
-        
-        if not hasattr(self, 'version'):
-            setattr(self, 'version', None)
-
-class Parser:
-    @staticmethod
-    def parse_integer(s: str) -> Union[Integer, Error]:
-        match = INTEGER_PATTERN.match(s)
-        if match is None:
-            return Error('parsing error', ErrorCode.PARSING_ERROR)
-
-        # check if the variable was declared nullable
-        nullable = False
-        type_ = match.group(1)
-        if type_.endswith('?'):
-            nullable = True
-
-        name = match.group(2)
-        value = match.group(3)
-
-        if (nullable) and (value == 'null'):
-            return Integer(name, None, True)
-
-        if (not nullable) and (value == 'null'):
-            msg = 'null value not allowed for non-nullable type: integer; use integer?'
-            return Error(msg, ErrorCode.NULLABLE_TYPE_ERROR)
-
-        return Integer(name, int(value), nullable)
-
-    @staticmethod
-    def parse_float(s: str) -> Union[Float, Error]:
-        def isnan(s: str) -> bool:
-            return 'nan' in s.lower()
-        
-        def isinf(s: str) -> bool:
-            return 'inf' in s.lower()
-
-        match = GENERIC_FLOAT_PATTERN.match(s)
-        if match is None:
-            return Error('parsing error', ErrorCode.PARSING_ERROR)
-
-        # check if the variable was declared nullable
-        nullable = False
-        type_ = match.group(1)
-        if type_.endswith('?'):
-            nullable = True
-
-        # extract the actual definition
-        name = match.group(2)
-        maybe_values = match.group(3)
-        num_match = FLOAT_PATTERN.match(maybe_values)
-
-        # check for nans/infs, and handle appropriately
-        if num_match is None:
-            if isinf(maybe_values):
-                return Float(name, float('inf'), nullable)
-            if isnan(maybe_values):
-                return Float(name, float('nan'), nullable)
-            
-            msg = f'parsing error - unknown token: {maybe_values}'
-            return Error(msg, ErrorCode.PARSING_ERROR)
-
-        # check again for any nans/infs that may have matched due to numbers being present
-        if isnan(maybe_values):
-            return Float(name, float('nan'), nullable)
-        if isinf(maybe_values):
-            return Float(name, float('inf'), nullable)
-        
-        value = num_match.group(0)
-        if (nullable) and (value == 'null'):
-            return Float(name, None, True)
-
-        if (not nullable) and (value == 'null'):
-            msg = 'null value not allowed for non-nullable type: float; use float?'
-            return Error(msg, ErrorCode.NULLABLE_TYPE_ERROR)
-
-        return Float(name, float(value), nullable)
-
-    @staticmethod
-    def parse_string(s: str) -> Union[String, Error]:
-        match = STRING_PATTERN.match(s)
-        if match is None:
-            return Error('parsing error', ErrorCode.PARSING_ERROR)
-
-        # check if the variable was declared nullable
-        nullable = False
-        type_ = match.group(1)
-        if type_.endswith('?'):
-            nullable = True
-
-        name = match.group(2)
-        value = match.group(3)
-
-        if (nullable) and (value == 'null'):
-            return String(name, None, True)
-
-        if (not nullable) and (value == 'null'):
-            msg = 'null value not allowed for non-nullable type: string; use string?'
-            return Error(msg, ErrorCode.NULLABLE_TYPE_ERROR)
-
-        # remove the "" from the string literal
-        value = value.replace('"', '')
-
-        return String(name, value, nullable)
-
-    @staticmethod
-    def parse_boolean(s: str) -> Union[Boolean, Error]:
-        match = BOOLEAN_PATTERN.match(s)
-        if match is None:
-            return Error('parsing error', ErrorCode.PARSING_ERROR)
-
-        # check if the variable was declared nullable
-        nullable = False
-        type_ = match.group(1)
-        if type_.endswith('?'):
-            nullable = True
-
-        name = match.group(2)
-        value = match.group(3)
-
-        if (nullable) and (value == 'null'):
-            return Boolean(name, None, True)
-
-        if (not nullable) and (value == 'null'):
-            msg = 'null value not allowed for non-nullable type: boolean; use boolean?'
-            return Error(msg, ErrorCode.NULLABLE_TYPE_ERROR)
-
-        # cast to correct Python type
-        if value == 'true':
-            value = True
-        else:
-            value = False
-        return Boolean(name, value, nullable)
-
-def try_cast(v: str) -> Value:
-    """
-    Helper method to parse integers, floats,
-    booleans, and strings from a given input.
-
-    The hierarchy of attempted cast is as follows:
-    - integer
-    - float
-    - boolean (true, false)
-    - string ("hello", 'hello', hello)
-    """
-    try:
-        return int(v)
-    except ValueError:
-        pass
+def parse_nullable_integer(s: str) -> Union[int, None, Error]:
+    match = NULLABLE_INTEGER_PATTERN.match(s)
+    if match is None:
+        return Error(f'invalid literal for integer type: {s}', ErrorCode.TYPE_ERROR)
     
-    try:
-        return float(v)
-    except ValueError:
-        pass
-    
-    if v == 'true':
+    value = match.group(1)
+    if value == 'null':
+        return None
+    return int(value)
+
+def parse_float(s: str) -> Union[float, Error]:
+    match = FLOAT_PATTERN.match(s)
+    if match is None:
+        # check for nan/infs first
+        if 'nan' in s.lower():
+            return float('nan')
+        if 'inf' in s.lower():
+            return float('inf')
+
+        # otherwise it's really an invalid value
+        return Error(f'invalid literal for float type: {s}', ErrorCode.TYPE_ERROR)
+
+    return float(match.group(1))
+
+def parse_nullable_float(s: str) -> Union[float, None, Error]:
+    match = NULLABLE_FLOAT_PATTERN.match(s)
+    if match is None:
+        # check for nan/infs first
+        if 'nan' in s.lower():
+            return float('nan')
+        if 'inf' in s.lower():
+            return float('inf')
+
+        # otherwise it's really an invalid value
+        return Error(f'invalid literal for float type: {s}', ErrorCode.TYPE_ERROR)
+
+    value = match.group(1)
+    if value == 'null':
+        return None
+    return float(value)
+
+def parse_string(s: str) -> Union[str, Error]:
+    match = STRING_PATTERN.match(s)
+    if match is None:
+        return Error(f'invalid literal for string type: {s}', ErrorCode.TYPE_ERROR)
+    return match.group(1).replace('"', '')
+
+def parse_nullable_string(s: str) -> Union[int, None, Error]:
+    match = NULLABLE_STRING_PATTERN.match(s)
+    if match is None:
+        return Error(f'invalid literal for string type: {s}', ErrorCode.TYPE_ERROR)
+
+    value = match.group(1)
+    if value == 'null':
+        return None
+    return value.replace('"', '')
+
+def parse_boolean(s: str) -> Union[bool, Error]:
+    match = BOOLEAN_PATTERN.match(s)
+    if match is None:
+        return Error(f'invalid literal for boolean type: {s}', ErrorCode.TYPE_ERROR)
+    value = match.group(1)
+    if value == 'true':
         return True
-    
-    if v == 'false':
-        return False
-    
-    return v.replace('"', ''). replace("'", '').strip()
+    return False
 
-def extract_version(s: str) -> Optional[Version]:
-    """
-    Extracts the version from the given string assuming
-    the input is specified as "frontmatter" using the
-    %% directive.
-    """
-    # iterator of the input string
-    s_ = iter(s)
-    
-    # consume and check the %% directive
-    directive = next(s_), next(s_)
-    if directive != ('%', '%'):
-        msg = (
-            'Invalid frontmatter. Missing %% directive.'
-        )
-        raise ValueError(msg)
-        
-    # discard whitespace until finding 'v'
-    c = next(s_)
-    while ord(c) in (SPACE, 'v'):
-        c = next(s_)
-    
-    remainder = ''
-    for c in s_:
-        if ord(c) == SPACE:
-            continue
-        
-        # don't consume the rest of the string
-        if ord(c) == COMMENT:
-            break
-        
-        remainder += c
+def parse_nullable_boolean(s: str) -> Union[int, None, Error]:
+    match = NULLABLE_BOOLEAN_PATTERN.match(s)
+    if match is None:
+        return Error(f'invalid literal for boolean type: {s}', ErrorCode.TYPE_ERROR)
+    value = match.group(1)
+    if value == 'null':
+        return None
 
-    # extract the version number
-    pat = r'[\d]+.[\d].[\d]'
-    regex = re.compile(pat)
-    match = regex.match(remainder)
-    
+    if value == 'true':
+        return True
+    return False
+
+def parse_variable(type_: str, name: str, value: str) -> Union[Variable, Error]:
+    parse_funcs = {
+        'integer': parse_integer,
+        'integer?': parse_nullable_integer,
+        'float': parse_float,
+        'float?': parse_nullable_float,
+        'string': parse_string,
+        'string?': parse_nullable_string,
+        'boolean': parse_boolean,
+        'boolean?': parse_nullable_boolean
+    }
+
+    pfunc = parse_funcs.get(type_)
+    if pfunc is None:
+        return Error(f'unknown varirable type: {type_}', ErrorCode.UNKNOWN_TYPE)
+
+    val = pfunc(value)    
+    if val is None:
+        return Variable(name, None)
+
+    if isinstance(val, Error):
+        return val
+
+    return Variable(name, val)
+
+def parse_variable_declaration(s: str) -> Union[None, Variable, Error]:
+    variable_match = VARIABLE_DECLARATION_PATTERN.match(s)
+    if variable_match is None:
+        return None
+
+    type_ = variable_match.group(1)
+    name = variable_match.group(2)
+    value = variable_match.group(3)
+    return parse_variable(type_, name, value)
+
+def table_type_parsers(s: str) -> List[Callable]:
+    parse_funcs = {
+        'integer': parse_integer,
+        'integer?': parse_nullable_integer,
+        'float': parse_float,
+        'float?': parse_nullable_float,
+        'string': parse_string,
+        'string?': parse_nullable_string,
+        'boolean': parse_boolean,
+        'boolean?': parse_nullable_boolean
+    }
+    types = [x.strip() for x in s.strip().split(',')]
+    type_checks = [x for x in types if x in parse_funcs.keys()]
+
+    # check for invalid type declarations in the table
+    if len(type_checks) < len(types):
+        msg = f'Unknown type(s) in table: {", ".join(set(types) - set(type_checks))}'
+        return Error(msg, ErrorCode.UNKNOWN_TYPE)
+
+    return [parse_funcs[t] for t in types]
+
+def parse_table_headers(s: str) -> List[str]:
+    return [x.strip().replace('"', '') for x in s.strip().split(',')]
+
+def parse_table_row(s: str, parsers: List[Callable]) -> List[Union[int, float, str, bool, None]]:
+    row = [x.strip() for x in s.strip().split(',')]
+    return [parse(r) for r, parse in zip(row, parsers)]
+
+def parse_table_declaration(s: str, io: IO) -> Union[None, Table, Error]:
+    # confirm this is a correct table definition
+    match = TABLE_DECLARATION_PATTERN.match(s)
     if match is None:
         return None
-    
-    version = match.string
-    major, minor, patch = version.split('.')
-    
-    return Version(int(major), int(minor), int(patch))
 
-def parse_variable(s: str) -> Optional[Variable]:
-    """
-    Parse a `Variable` type from a @var declaration.
-    If a parsing error occurs due to an invalid match,
-    the function returns `None`
-    """
-    pat = r'^(@var)\((.*)\)([\s]+=[\s]+\S+)'
-    regex = re.compile(pat)
-    match = regex.match(s)
-    
-    if match is None:
-        return None
+    has_header = False
+    if match.group(1).endswith('+'):
+        has_header = True
 
     name = match.group(2)
-    remainder = match.group(3)
-    value = remainder.split('=')[-1].strip()
-    
-    # hierachy: int -> float -> bool -> str
-    value = try_cast(value)
-    
-    return Variable(name, value)
+    # now, consume the next line to get parsers for each table type
+    parsers = table_type_parsers(next(io))
 
-def parse_table_meta(s: str) -> Optional[TableMeta]:
-    """
-    Parse the metadata from a @table declaration
-    required to then parse the values of the table
-    values below the @table. 
-    """
-    pat = r'^(@table)\((.*)\)'
-    regex = re.compile(pat)
-    match = regex.match(s)
-    
-    if match is None:
-        return None
-    
-    contents = match.group(2)
-    name, remainder = contents.split(',')[0:2]
+    # consume the header row if it exists
+    header = None
+    if has_header:
+        header = parse_table_headers(next(io))
 
-    remainder = remainder.strip()
-    header = False
-    if remainder.endswith('+'):
-        header = True
-        remainder = remainder[0:-1]
+    # then consume and parse each row until encountering a blank line
+    s = next(io)
+    values = []
+    while s.strip() != '':
+        try:
+            row = parse_table_row(s, parsers)
+        except:
+            return Error(f'error parsing row: {s}', ErrorCode.PARSING_ERROR)
+        values.append(row)
+        try:
+            s = next(io)
+        except StopIteration:
+            return Table(name, header, values)
 
-    try:
-        rows = int(remainder)
-    except ValueError:
-        msg = (
-            f'Table rows must be specified as an integer. '
-            f'Found: @table({name}, {remainder})'
-        )
-        raise ValueError(msg)
-        
-    return TableMeta(name, header, rows)
+    return Table(name, header, values)
 
 def load(io: IO) -> dict:
     """
@@ -366,60 +264,55 @@ def load(io: IO) -> dict:
 
     Fable -> Python
     - string -> str
+    - string? -> Optional[str]
     - integer -> int
-    - real -> float
+    - integer? -> Optional[int]
+    - float -> float
+    - float? -> Optional[float]
     - boolean -> bool
+    - boolean? -> Optional[bool]
     - table -> List[List[Union[float, int, str, bool]]]
+
+    Parameters:
+        io: a `.read()`-supporting file-like object containing a Fable document
     """
     results = {}
+    errors = []
 
     # document frontmatter
     s = next(io)
     if s.startswith('%%'):
         # TODO: used for forward compatibility with future parsers
-        version = extract_version(s)
+        version = Version.parse_specification(s)
 
     for s in io:
-        if s.startswith('#'):
-            # ignore any comments
-            continue
-
-        if not s.startswith('@'):
-            # other stuff that we don't know so we ignore
-            continue
-
-        if s.startswith('@table'):
-            meta = parse_table_meta(s)
-
-            # consume the approprite number of rows
-            rows = []
-            header = None
-            if meta.header:
-                s = next(io)
-                header = [try_cast(v) for v in s.strip().split(',')]
-
-            for _ in range(meta.rows):
-                s = next(io)
-                row = [try_cast(v) for v in s.strip().split(',')]
-                rows.append(row)
-
-            table = Table(
-                meta.name,
-                header,
-                rows
-            )
-            results[table.name] = {
-                'header': table.header,
-                'values': table.values
-            }
-            continue
-        
-        if s.startswith('@var'):
-            var = parse_variable(s)
-            if var is None:
+        # try parsing variable definitions
+        maybe_variable = parse_variable_declaration(s)
+        if maybe_variable is not None:
+            if isinstance(maybe_variable, Error):
+                errors.append(maybe_variable)
                 continue
             
-            results[var.name] = var.value
+            # otherwise store the parsed key-value pair
+            results[maybe_variable.name] = maybe_variable.value
+            continue
+
+        # try parsing table definitions
+        if s.strip().startswith('table'):
+            maybe_table = parse_table_declaration(s, io)
+            if maybe_table is not None:
+                if isinstance(maybe_table, Error):
+                    errors.append(maybe_table)
+                    continue
+
+                # otherwise store the table
+                results[maybe_table.name] = {
+                    'header': maybe_table.header,
+                    'values': maybe_table.values
+                }
+
+    if len(errors) != 0:
+        raise ParsingError(*errors)
 
     return results
 
