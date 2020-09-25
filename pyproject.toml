@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "fable-parser"
+name = "fable-serde"
 version = "0.2.0"
 description = "A simple, linear, non-recursive data interchange specification"
 authors = ["Yannis Katsaros <yannis@katsaros.io>"]
