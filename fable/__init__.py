@@ -1,0 +1,3 @@
+from .fable import (
+    load,
+)
