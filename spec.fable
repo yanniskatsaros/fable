@@ -19,8 +19,8 @@ boolean? is_present null
 string? name null
 
 # these cause a parsing error, for example
-integer years null   # requires integer? declaration
-float salary null    # requires float? declaration
+# integer years null   # requires integer? declaration
+# float salary null    # requires float? declaration
 
 # float types support scientific notation, infinity, and "not a number" values
 float a_num 1.4151426
@@ -49,7 +49,7 @@ float m_num -nan
 # nan and null are two different concepts
 float ok_float_1 nan
 float ok_float_2 14.51
-float bad_float null   # error, need float?
+# float bad_float null   # error, need to use: float?
 float? ok_float_3 null   # this is the correct way
 float? ok_float_4 nan    # also ok
 
